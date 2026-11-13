@@ -1,2 +1,2 @@
 # outbound-delivery-intelligence
-Painel de Demandas
+Dashboard de Governança e Acompanhamento Outbound
