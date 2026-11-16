@@ -555,7 +555,20 @@ async function pset(c,obj){const doc=c==='snapshots'?packSnap(obj):obj;
  memPut(c,obj);return false}
 async function pdel(c,id){if(DBH){try{await DBH.collection(c).doc(id).delete()}catch(e){console.warn(e)}}memDel(c,id)}
 function flash(msg){const b=$('#banner');const d=document.createElement('div');d.className='banner';d.innerHTML=esc(msg);b.appendChild(d);setTimeout(()=>d.remove(),6000)}
+/* Fora do claude.ai (ex.: GitHub Pages) não há db do artefato: lê os snapshots publicados em ./snapshots/ pela rotina diária. */
+async function loadStaticSnaps(){
+  try{
+    const r=await fetch('./snapshots/index.json',{cache:'no-cache'});if(!r.ok)return;
+    const ix=await r.json();const files=(ix.files||[]).slice(-60);
+    const docs=(await Promise.all(files.map(f=>fetch('./snapshots/'+f,{cache:'no-cache'}).then(x=>x.ok?x.json():null).catch(()=>null)))).filter(Boolean);
+    if(DBH||!docs.length)return;
+    const demo=ST.snaps.filter(x=>x.demo);
+    ST.snaps=demo.concat(docs.map(unpackSnap).sort((a,b)=>(a.ts||0)-(b.ts||0)));
+    render();
+  }catch(e){console.warn(e)}
+}
 async function initCaps(){
+ loadStaticSnaps();
  try{if(!(window.claude&&claude.use))return;
   claude.use('sample').then(s=>{ST.sample=s;if(ST.page==='ai')render()}).catch(()=>{});
   claude.use('downloads').then(s=>{ST.dl=s}).catch(()=>{});
