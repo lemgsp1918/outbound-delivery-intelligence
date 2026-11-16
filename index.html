@@ -161,6 +161,10 @@ const fd=s=>s?s.slice(8,10)+'/'+s.slice(5,7):'—';
 const fdy=s=>s?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'—';
 const addDays=(s,n)=>{const d=D(s);d.setDate(d.getDate()+n);return iso(d)};
 const NOSEL='(sem responsável)';
+/* Cliente de cada demanda (campo Cliente do ADO). CLI0 = carga inicial; os snapshots da rotina trazem 'cli' e prevalecem. */
+const CLI0={"42":"Melhoria","133":"Friegelar","1170":"Melhoria","1479":"Melhoria","1483":"Melhoria","1486":"Reforma Tributária","1740":"Monitoramento Municipios","2705":"Reforma Tributária - Unidas","2706":"Reforma Tributária","2709":"Reforma Tributária","2710":"BW"};
+const CLIMAP=Object.assign({},CLI0);const cliOf=did=>CLIMAP[did]||'';
+
 const isBiz=(d,hol)=>d.getDay()!==0&&d.getDay()!==6&&!hol.includes(iso(d));
 function bdays(a,b,hol){if(!a||!b||b<a)return 0;let n=0;const e=D(b);for(let d=D(a);d<=e;d.setDate(d.getDate()+1))if(isBiz(d,hol))n++;return n}
 function endAfter(n,from,hol){if(n<=0)return null;let c=0;const d=D(from);for(let i=0;i<800;i++){if(isBiz(d,hol)){c++;if(c===n)return iso(d)}d.setDate(d.getDate()+1)}return null}
@@ -171,7 +175,7 @@ const DEFMAP={'Done':'done','Concluído':'done','Aprovado para Produção':'done
 const ST={page:'exec',snaps:[],actions:[],notes:[],persist:'mem',sample:null,dl:null,
  cfg:{cap:6,window:5,hol:['2026-11-20'],defTeam:1,okMargin:2,critMargin:3,soon:1,unasWarn:0.1,redShare:0.25,occWarn:0.85,daysWarn:4,ref:''},
  gmap:Object.assign({},DEFMAP),
- f:{d:'',r:'',s:'',g:''},sim:{moves:[],extra:{}},sort:{},ui:{},cmpA:null,cmpB:null,sel:[],tab:{},aiText:'',aiBusy:false};
+ f:{d:'',c:'',r:'',s:'',g:''},sim:{moves:[],extra:{}},sort:{},ui:{},cmpA:null,cmpB:null,sel:[],tab:{},aiText:'',aiBusy:false};
 const grp=s=>ST.gmap[s]||'prog';
 const isDone=s=>grp(s)==='done';
 const SPR=it=>{if(!it)return '(sem sprint)';const m=it.replace(/^4TAX-OUTBOUND\\?/,'');return m||'(sem sprint)'};
@@ -196,7 +200,7 @@ const prevSnap=()=>{const s=snapsSorted();return s.length>1?s[s.length-2]:null};
 const refDate=snap=>ST.cfg.ref||(snap||curSnap()).date;
 /* filtros globais */
 function passF(t,ignore){const f=ST.f;
- if(f.d&&String(t.d)!==f.d&&ignore!=='d')return false;
+ if(f.d&&String(t.d)!==f.d&&ignore!=='d')return false;  if(f.c&&cliOf(t.d)!==f.c&&ignore!=='c')return false;
  if(f.r&&ignore!=='r'){if(f.r===NOSEL){if(t.r)return false}else if(t.r!==f.r)return false}
  if(f.s&&SPR(t.it)!==f.s&&ignore!=='s')return false;
  if(f.g&&grp(t.s)!==f.g&&ignore!=='g')return false;return true}
@@ -223,7 +227,7 @@ function calcDemands(tasks,opts){opts=opts||{};const cfg=ST.cfg;const snap=opts.
  const out=[];
  DEM.forEach(dm=>{ if(opts.onlyDem&&dm.id!==opts.onlyDem)return;
   const T=tasks.filter(t=>t.d===dm.id);
-  if(!T.length&&(ST.f.d||ST.f.r||ST.f.s||ST.f.g)&&!opts.onlyDem)return;
+  if(!T.length&&(ST.f.d||ST.f.c||ST.f.r||ST.f.s||ST.f.g)&&!opts.onlyDem)return;
   const open=T.filter(t=>!isDone(t.s));const done=T.length-open.length;
   const est=sum(T,t=>t.est),estDone=sum(T.filter(t=>isDone(t.s)),t=>t.est),cw=sum(T,t=>t.cw),rem=sum(open,t=>t.rem);
   const base=loadsOf(T,'rem');const sm=applySim(base.L,base.un,dm.id,opts.useSim?ST.sim:null);
@@ -281,7 +285,7 @@ function peopleCalc(tasks,dms,sim){const cfg=ST.cfg;const cap=cfg.cap,win=cfg.wi
  return Object.values(P).map(p=>{p.demRem=sum(Object.values(p.dem));p.rem=p.demRem+p.outRem;p.nDem=Object.keys(p.dem).filter(k=>p.dem[k]>0||tasks.some(t=>t.r===p.name&&t.d==k&&!isDone(t.s))).length;
   p.capTot=cap*win;p.free=p.capTot-p.rem;p.occ=p.rem/p.capTot;p.days=p.rem/cap;
   p.crit=Object.keys(p.dem).filter(k=>{const d=dms.find(x=>String(x.id)===k);return d&&(d.hl==='r')&&p.dem[k]>0}).length;return p}).sort((a,b)=>b.rem-a.rem)}
-function opts_others(){return OTH().filter(o=>o.ex&&!o.done&&o.r&&(!ST.f.r||ST.f.r===o.r)&&!ST.f.d&&(!ST.f.s||SPR(o.it)===ST.f.s)&&(!ST.f.g||grp(o.s)===ST.f.g))}
+function opts_others(){return OTH().filter(o=>o.ex&&!o.done&&o.r&&(!ST.f.r||ST.f.r===o.r)&&!ST.f.d&&!ST.f.c&&(!ST.f.s||SPR(o.it)===ST.f.s)&&(!ST.f.g||grp(o.s)===ST.f.g))}
 /* totais */
 function totals(tasks,dms){const open=tasks.filter(t=>!isDone(t.s));const G={};tasks.forEach(t=>{const g=grp(t.s);G[g]=(G[g]||0)+1});
  const est=sum(tasks,t=>t.est),estDone=sum(tasks.filter(t=>isDone(t.s)),t=>t.est);
@@ -547,7 +551,7 @@ function pgAct(){const A=ST.actions;const pend=A.filter(a=>a.status==='Pendente'
 /* ============ PERSISTÊNCIA ============ */
 let DBH=null;
 const packSnap=s=>({id:s.id,date:s.date,label:s.label,origin:s.origin,ts:s.ts||Date.now(),note:s.note||'',rows:s.tasks.map(t=>[t.id,t.d,t.s,t.r||'',t.est||0,t.rem||0,t.cons||0,t.cw||0,t.it||'']),meta:s.meta||{},ado:s.ado||null,oth:s.oth||null,auto:!!s.auto});
-const unpackSnap=d=>{const m=d.meta||{};Object.keys(m).forEach(k=>{if(!META[k])META[k]=m[k]});return{id:d.id,date:d.date,label:d.label,origin:d.origin,ts:d.ts,note:d.note,meta:m,ado:d.ado||null,oth:d.oth||null,auto:!!d.auto,tasks:(d.rows||[]).map(r=>({id:r[0],d:r[1],s:r[2],r:r[3]||null,est:r[4],rem:r[5],cons:r[6],cw:r[7],it:r[8]}))}};
+const unpackSnap=d=>{const m=d.meta||{};if(d.cli)Object.keys(d.cli).forEach(k=>{if(d.cli[k])CLIMAP[k]=d.cli[k]});(d.dem||[]).forEach(x=>{if(x&&x.cli)CLIMAP[x.id]=x.cli});Object.keys(m).forEach(k=>{if(!META[k])META[k]=m[k]});return{id:d.id,date:d.date,label:d.label,origin:d.origin,ts:d.ts,note:d.note,meta:m,ado:d.ado||null,oth:d.oth||null,auto:!!d.auto,tasks:(d.rows||[]).map(r=>({id:r[0],d:r[1],s:r[2],r:r[3]||null,est:r[4],rem:r[5],cons:r[6],cw:r[7],it:r[8]}))}};
 function memPut(c,obj){const arr=c==='snapshots'?ST.snaps:ST[c];const i=arr.findIndex(x=>x.id===obj.id);if(i>=0)arr[i]=obj;else arr.push(obj)}
 function memDel(c,id){const arr=c==='snapshots'?ST.snaps:ST[c];const i=arr.findIndex(x=>x.id===id);if(i>=0)arr.splice(i,1)}
 async function pset(c,obj){const doc=c==='snapshots'?packSnap(obj):obj;
@@ -680,7 +684,7 @@ async function impApply(){const I=ST.imp;if(!I||!I.rep||!I.rep.ok)return;const R
  const ts=Date.now();const snap={id:'imp-'+ts,ts,date:I.date,label:(I.label||'').trim()||('Importação '+(I.name||'colada')+' · '+fd(I.date)),origin:'Importação '+(I.name||'colada')+' ('+R.tasks.length+' Tasks)',tasks:[...cur.values()],meta,ado:cs.ado||null,oth:cs.oth||null,note:'Importado pelo usuário; Completed Work e responsável conforme o arquivo.'};
  const ok=await pset('snapshots',snap);ST.imp=null;ST.cmpA=null;ST.cmpB=null;flash('Novo snapshot criado: '+snap.label+(ok?' (gravado no armazenamento compartilhado)':' (somente nesta sessão)'));render()}
 /* ============ VALIDAÇÃO DO BASELINE ============ */
-function baseline(){applyAdo(null);OTHF=DATA.oth;const sv=ST.f;ST.f={d:'',r:'',s:'',g:''};const sc=ST.cfg.ref;ST.cfg.ref='';const snaps=ST.snaps;const demo=snaps.filter(s=>s.demo).sort((a,b)=>a.date<b.date?-1:1);const R=[];
+function baseline(){applyAdo(null);OTHF=DATA.oth;const sv=ST.f;ST.f={d:'',c:'',r:'',s:'',g:''};const sc=ST.cfg.ref;ST.cfg.ref='';const snaps=ST.snaps;const demo=snaps.filter(s=>s.demo).sort((a,b)=>a.date<b.date?-1:1);const R=[];
  try{if(demo.length<2){return[]}const A=demo[0],B=demo[1];const dB=calcDemands(B.tasks,{snap:B,prev:A});const tB=totals(B.tasks),tA=totals(A.tasks);const ppl=peopleCalc(B.tasks,dB,null);
   const g=id=>dB.find(d=>d.id===id)||{};const pe=n=>ppl.find(p=>p.name===n)||{};
   const row=(l,exp,act,ok)=>R.push({l,exp,act,ok});const near=(a,b,t)=>Math.abs(a-b)<=(t||0.06);
@@ -722,7 +726,7 @@ ST.theme=themePref();applyTheme(ST.theme);
 const TH_IC={auto:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',light:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',dark:'<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'};
 const themeSeg=()=>'<span class="seg" role="group" aria-label="Tema" style="align-self:flex-end">'+[['auto','Automático (segue o sistema)'],['light','Tema claro'],['dark','Tema escuro']].map(([k,l])=>'<button type="button" data-act="theme" data-v="'+k+'" title="'+l+'" aria-label="'+l+'" aria-pressed="'+(ST.theme===k)+'" class="'+(ST.theme===k?'on':'')+'">'+TH_IC[k]+'</button>').join('')+'</span>';
 function renderFilters(){const cs=curSnap();const all=cs.tasks;const opt=(v,l,cur)=>'<option value="'+esc(v)+'"'+(String(cur)===String(v)?' selected':'')+'>'+esc(l)+'</option>';
- $('#filters').innerHTML='<label>Demanda<select data-f="d">'+opt('','Todas',ST.f.d)+DEM.map(d=>opt(d.id,d.id+' · '+d.short,ST.f.d)).join('')+'</select></label><label>Responsável<select data-f="r">'+opt('','Todos',ST.f.r)+opt(NOSEL,NOSEL,ST.f.r)+uniq(all.map(t=>t.r).filter(Boolean)).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>opt(n,n,ST.f.r)).join('')+'</select></label><label>Sprint<select data-f="s">'+opt('','Todas',ST.f.s)+sprints().map(n=>opt(n,n,ST.f.s)).join('')+'</select></label><label>Status<select data-f="g">'+opt('','Todos',ST.f.g)+Object.entries(GROUPS).map(([k,v])=>opt(k,v,ST.f.g)).join('')+'</select></label>'+(ST.f.d||ST.f.r||ST.f.s||ST.f.g?'<button class="btn sm" data-act="clrf" style="align-self:flex-end">Limpar filtros</button>':'')+'<span class="sp"></span><span class="dim" style="align-self:flex-end;font-size:12px">'+CX.tasks.length+' de '+cs.tasks.length+' Tasks</span>'+themeSeg()+shotBtn()}
+ $('#filters').innerHTML='<label>Demanda<select data-f="d">'+opt('','Todas',ST.f.d)+DEM.filter(d=>!ST.f.c||cliOf(d.id)===ST.f.c).map(d=>opt(d.id,d.id+' · '+d.short,ST.f.d)).join('')+'</select></label><label>Cliente<select data-f="c">'+opt('','Todos',ST.f.c)+uniq(DEM.map(d=>cliOf(d.id)).filter(Boolean)).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>opt(n,n,ST.f.c)).join('')+'</select></label><label>Responsável<select data-f="r">'+opt('','Todos',ST.f.r)+opt(NOSEL,NOSEL,ST.f.r)+uniq(all.map(t=>t.r).filter(Boolean)).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>opt(n,n,ST.f.r)).join('')+'</select></label><label>Sprint<select data-f="s">'+opt('','Todas',ST.f.s)+sprints().map(n=>opt(n,n,ST.f.s)).join('')+'</select></label><label>Status<select data-f="g">'+opt('','Todos',ST.f.g)+Object.entries(GROUPS).map(([k,v])=>opt(k,v,ST.f.g)).join('')+'</select></label>'+(ST.f.d||ST.f.c||ST.f.r||ST.f.s||ST.f.g?'<button class="btn sm" data-act="clrf" style="align-self:flex-end">Limpar filtros</button>':'')+'<span class="sp"></span><span class="dim" style="align-self:flex-end;font-size:12px">'+CX.tasks.length+' de '+cs.tasks.length+' Tasks</span>'+themeSeg()+shotBtn()}
 function renderBanner(){const cs=curSnap();$('#banner').innerHTML=cs.demo?'<div class="banner"><b>Dados históricos de demonstração.</b> Baseline do ADO (4TAX-OUTBOUND) de '+fdy(cs.date)+', usado para validar os indicadores. Não é a leitura atual do Azure DevOps.<span class="sp"></span><button class="btn sm" data-nav="data">Importar dados</button></div>':'<div class="banner" style="background:var(--blue-bg);border-color:rgba(59,130,246,.4);color:var(--blue2)">Fonte: <b>'+esc(cs.origin)+'</b> · snapshot de '+fdy(cs.date)+(cs.auto&&cs.ts?' · atualizado em '+new Date(cs.ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'')+'.</div>'}
 function renderFoot(){const cs=curSnap();$('#sfoot').innerHTML='Snapshot: <b>'+esc(cs.label)+'</b><br>Persistência: '+(ST.persist==='db'?'compartilhada':'só nesta sessão')+'<br>Cap.: '+ST.cfg.cap+' h/dia'}
 function render(){try{compute();renderNav();renderFilters();renderBanner();renderFoot();const pg=NAV.find(n=>n[0]===ST.page)||NAV[0];$('#view').innerHTML=pg[2]();renderDrawer()}catch(e){console.error(e);$('#view').innerHTML='<div class="note r">Erro ao renderizar: '+esc(e.message)+'</div>'}}
@@ -755,7 +759,7 @@ async function act(a,el){const d=el.dataset;if(a==='theme'){setTheme(d.v);render
  if(a==='shotclose'){const o=$('#shotov');if(o)o.remove();return}
  if(a==='shotdl'){shotDl();return}
  if(a==='closedrawer'){ST.ui.drawer=null;renderDrawer()}
- else if(a==='clrsel'){ST.sel=[];render()}else if(a==='clrf'){ST.f={d:'',r:'',s:'',g:''};render()}
+ else if(a==='clrsel'){ST.sel=[];render()}else if(a==='clrf'){ST.f={d:'',c:'',r:'',s:'',g:''};render()}
  else if(a==='simadd'){const dm=+$('#sim-d').value,from=$('#sim-from').value,to=$('#sim-to').value,h=parseFloat($('#sim-h').value);if(!(h>0)||from===to){flash('Informe horas > 0 e pessoas diferentes.');return}ST.sim.moves.push({d:dm,from,to,h});ST.ui.simH=null;render()}
  else if(a==='simrm'){ST.sim.moves.splice(+d.i,1);render()}else if(a==='simreset'){ST.sim={moves:[],extra:{}};render()}
  else if(a==='mkaction'){const r=CX.risks.find(x=>x.key===d.rk);if(r){ST.ui.actPre={prob:r.title+': '+r.desc,act:r.rec,dem:r.dem,owner:(r.who&&r.who!==NOSEL)?r.who:'',prio:r.sev==='crit'?'critica':r.sev==='alta'?'alta':r.sev==='med'?'media':'baixa',riskKey:r.key,due:addDays(today(),1)};ST.page='act';ST.ui.drawer=null;render();scrollTo(0,0)}}
