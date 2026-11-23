@@ -176,7 +176,7 @@ function endAfter(n,from,hol){if(n<=0)return null;let c=0;const d=D(from);for(le
 const GROUPS={todo:'Não iniciada',prog:'Em andamento',rev:'Em revisão',test:'Em testes',done:'Concluída'};
 const GRANK={todo:0,prog:1,rev:2,test:3,done:4};
 const DEFMAP={'Done':'done','Concluído':'done','Aprovado para Produção':'done','To Do':'todo','New':'todo','Pronta para Sprint':'todo','Em andamento':'prog','In Progress':'prog','Desenvolvimento':'prog','Em Desenvolvimento':'prog','Em Elaboração TDD':'prog','Análise/Refinamento':'prog','Revisão Técnica':'rev','Revisão/Teste':'rev','Aguardando Validação HOM':'rev','Waiting Validação HOM':'rev','Aguardando Aprovação PRD':'rev','Waiting Approved PRD':'rev','Em Testes Técnicos':'test'};
-const ST={page:'exec',snaps:[],actions:[],notes:[],persist:'mem',sample:null,dl:null,
+const ST={page:'exec',snaps:[],warn:[],actions:[],notes:[],persist:'mem',sample:null,dl:null,
  cfg:{cap:6,window:5,hol:['2026-11-20'],defTeam:1,okMargin:2,critMargin:3,soon:1,unasWarn:0.1,redShare:0.25,occWarn:0.85,daysWarn:4,ref:''},
  gmap:Object.assign({},DEFMAP),
  f:{d:'',c:'',r:'',s:'',g:'',k:''},sim:{moves:[],extra:{}},sort:{},ui:{},cmpA:null,cmpB:null,sel:[],tab:{},aiText:'',aiBusy:false};
@@ -226,7 +226,7 @@ function regressions(tasks,prevTasks){ if(!prevTasks)return[];const pm=new Map(p
  return tasks.filter(t=>{const p=pm.get(t.id);return p&&GRANK[grp(t.s)]<GRANK[grp(p.s)]}).map(t=>({t,p:pm.get(t.id)}))}
 /* calc principal: tasks já filtradas (ou não), snap p/ referência */
 function calcDemands(tasks,opts){opts=opts||{};const cfg=ST.cfg;const snap=opts.snap||curSnap();const ref=opts.ref||refDate(snap);
- const prev=opts.noPrev?null:(opts.prev===undefined?prevSnap():opts.prev);const prevMap=prev?new Map(prev.tasks.map(t=>[t.id,t])):null;
+ const prev=opts.noPrev?null:(opts.prev===undefined?prevSnap():opts.prev);const prevMap=prev?new Map(prev.tasks.map(t=>[t.id,t])):null;const pMode=prev?cmpMode(prev,snap):null;const prevIds=prev?new Set(catMap(prev).keys()):null;
  const regs=prev?regressions(tasks,prev.tasks):[];const regBy={};regs.forEach(r=>(regBy[r.t.d]=regBy[r.t.d]||[]).push(r));
  const out=[];
  DEM.forEach(dm=>{ if(opts.onlyDem&&dm.id!==opts.onlyDem)return;   if(!opts.onlyDem&&!demVisible(dm.id))return;
@@ -243,12 +243,12 @@ function calcDemands(tasks,opts){opts=opts||{};const cfg=ST.cfg;const snap=opts.
   const zeroOpen=open.filter(t=>!t.rem).length;
   const noEst=open.filter(t=>!t.est&&!t.rem).length;
   const diverg=T.filter(t=>t.est&&t.cw>t.est*1.0001&&true).length;
-  const pt=prevMap?T.filter(t=>prevMap.has(t.id)):[];const newT=prevMap?T.filter(t=>!prevMap.has(t.id)):[];
+  const pt=prevMap?T.filter(t=>prevMap.has(t.id)):[];const newT=prevMap?(pMode==='metodologia'?[]:T.filter(t=>!prevIds.has(t.id))):[];
   const pm=prevMap?prev.tasks.filter(t=>t.d===dm.id):[];
   const pDone=pm.filter(t=>isDone(t.s)).length,pEst=sum(pm,t=>t.est),pEstDone=sum(pm.filter(t=>isDone(t.s)),t=>t.est),pRem=sum(pm.filter(t=>!isDone(t.s)),t=>t.rem);
   const r={id:dm.id,short:dm.short,title:dm.t,ado:dm.ado,tasks:T.length,done,open:open.length,est,estDone,cw,rem,unas:cd.unas,unasRaw:base.un,loads:sm.L,people:people.length,active:cd.n,nEff:cd.nEff,
    pctT:T.length?done/T.length:null,pctH:est?estDone/est:null,avail,need:cd.need,needNamed:cd.needNamed,gar:cd.gar,margin,proj,teto:sum(open,t=>t.cons),needT:cdT.need,marginT,loadsT:sm2.L,unT:sm2.un,
-   zeroOpen,noEst,diverg,regs:regBy[dm.id]||[],newT:newT.length,newH:sum(newT,t=>t.est),growth:newT.length>0,pDone,pTasks:pm.length,pEst,pEstDone,pRem,prevPctH:pEst?pEstDone/pEst:null,prevPctT:pm.length?pDone/pm.length:null,
+   zeroOpen,noEst,diverg,regs:regBy[dm.id]||[],newT:newT.length,newH:sum(newT,t=>t.est),growth:newT.length>0,metod:pMode==='metodologia',lgc:pMode==='legado-legado',inc:(snap.inconc||[]).filter(x=>(x.cands||[]).some(c=>(c&&typeof c==='object'?c.id:c)===dm.id)).length,pDone,pTasks:pm.length,pEst,pEstDone,pRem,prevPctH:pEst?pEstDone/pEst:null,prevPctT:pm.length?pDone/pm.length:null,
    cd,cdT,ref};
   // classificação e saúde
   const why=[];let cls,hl;
@@ -387,7 +387,7 @@ function pgExec(){const {dms,tot,ov,tasks,ps}=CX;
  const hdot={g:'✓',y:'!',r:'✕',n:'?'}[ov.hl];const hlt={g:'Dentro do planejamento',y:'Atenção: risco potencial',r:'Comprometimento de prazo ou capacidade',n:'Dados insuficientes'}[ov.hl];
  const hero='<div class="hero"><section class="card health"><div class="row"><div class="dot '+ov.hl+'">'+hdot+'</div><div><h3>Saúde do Delivery</h3><h2 style="font-size:18px">'+hlt+'</h2></div></div><ul>'+ov.why.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul><div class="legend"><span><i style="background:var(--grn)"></i>Verde</span><span><i style="background:var(--yel)"></i>Amarelo</span><span><i style="background:var(--red)"></i>Vermelho</span><span><i style="background:var(--gry)"></i>Cinza</span></div><div class="dim" style="font-size:11.5px">Critérios transparentes e configuráveis em Dados &amp; Configuração. Margem = dias úteis até a Entrega ADO − dias de gargalo.</div></section>'+
  '<div class="grid g2" style="align-content:start">'+kpi('Conclusão por Tasks',pc(tot.pctT),tot.done+' de '+tot.n+' Tasks','blue',TIPS.pctT)+kpi('Conclusão por horas',pc(tot.pctH),f0(tot.estDone)+' de '+f0(tot.est)+' h estimadas','blue',TIPS.pctH)+kpi('Horas restantes',fh(tot.rem),'Remaining Work das Tasks abertas','yel',TIPS.rem)+kpi('Horas sem responsável',fh(tot.unas),pc(tot.unas/Math.max(1,tot.rem))+' das horas restantes',tot.unas>0?'red':'grn',TIPS.unas)+'</div></div>';
- const grid='<div class="grid g-kpi" style="margin-bottom:14px">'+kpi('Demandas monitoradas',dms.length)+kpi('Features',feats)+kpi('User Stories',us)+kpi('Tasks',tot.n)+kpi('Concluídas',tot.done,'','grn')+kpi('Em andamento',tot.prog)+kpi('Em revisão',tot.rev,'','yel')+kpi('Em testes',tot.test,'','yel')+kpi('Não iniciadas',tot.todo)+kpi('Horas estimadas',fh(tot.est),'','',TIPS.est)+kpi('Horas realizadas',fh(tot.cw),'Completed Work apontado','',TIPS.cw)+kpi('Demandas em risco',risk,'vermelhas (risco/comprometidas/vencidas)',risk?'red':'grn')+kpi('Entregas atrasadas',venc,'Entrega ADO vencida com Tasks abertas',venc?'red':'grn')+'</div>';
+ const grid=qualBlock()+'<div class="grid g-kpi" style="margin-bottom:14px">'+kpi('Demandas monitoradas',dms.length)+kpi('Features',feats)+kpi('User Stories',us)+kpi('Tasks',tot.n)+kpi('Concluídas',tot.done,'','grn')+kpi('Em andamento',tot.prog)+kpi('Em revisão',tot.rev,'','yel')+kpi('Em testes',tot.test,'','yel')+kpi('Não iniciadas',tot.todo)+kpi('Horas estimadas',fh(tot.est),'','',TIPS.est)+kpi('Horas realizadas',fh(tot.cw),'Completed Work apontado','',TIPS.cw)+kpi('Demandas em risco',risk,'vermelhas (risco/comprometidas/vencidas)',risk?'red':'grn')+kpi('Entregas atrasadas',venc,'Entrega ADO vencida com Tasks abertas',venc?'red':'grn')+'</div>';
  const sns=snapsSorted().map(snapMetrics);
  const c1=lineChart({cats:sns.map(s=>s.label),series:[{name:'% por Tasks',vals:sns.map(s=>s.pctT),color:PAL[0]},{name:'% por horas estimadas',vals:sns.map(s=>s.pctH),color:PAL[1]}],max:1,fmt:v=>pc(v),labels:true,aria:'Evolução percentual'});
  const c2=barChart({cats:dms.map(d=>String(d.id)),series:[{name:'Estimadas',vals:dms.map(d=>d.est),color:PAL[0]},{name:'Realizadas',vals:dms.map(d=>d.cw),color:PAL[1]},{name:'Restantes',vals:dms.map(d=>d.rem),color:PAL[3]}],fmt:f0,aria:'Horas por demanda'});
@@ -404,7 +404,7 @@ function pgExec(){const {dms,tot,ov,tasks,ps}=CX;
 /* ============ PÁGINA 2: DEMANDAS ============ */
 function demCols(){return[
  {k:'sel',l:'',nosort:true,c:true,r:d=>'<input type="checkbox" data-cmp="'+d.id+'"'+(ST.sel.includes(d.id)?' checked':'')+' title="Comparar">'},
- {k:'id',l:'ID',r:d=>'<b class="mono">'+d.id+'</b>'},{k:'short',l:'Demanda',r:d=>esc(d.short)+(d.growth?' <span class="pill y" title="Escopo cresceu: +'+d.newT+' Tasks (+'+f1(d.newH)+' h) desde o snapshot anterior">escopo +'+d.newT+'</span>':'')},
+ {k:'id',l:'ID',r:d=>'<b class="mono">'+d.id+'</b>'},{k:'short',l:'Demanda',r:d=>esc(d.short)+(d.growth?' <span class="pill y" title="Escopo cresceu: +'+d.newT+' Tasks (+'+f1(d.newH)+' h) desde o snapshot anterior'+(d.lgc?' (snapshot legado: entrada de escopo não verificável)':'')+'">escopo +'+d.newT+'</span>':'')+(d.inc?' <span class="pill y" title="'+d.inc+' Task(s) inconclusiva(s) com esta demanda como candidata sugerida; horas não somadas à demanda. Veja a página Qualidade da Associação.">'+d.inc+' inconclusiva(s)</span>':'')},
  {k:'feat',l:'Feature',v:d=>(DATA.feats.find(f=>f.d===d.id)||{}).id,r:d=>{const f=DATA.feats.filter(f=>f.d===d.id);return f.length?'<span class="mono">'+f[0].id+'</span>'+(f.length>1?' <span class="dim">+'+(f.length-1)+'</span>':''):'<span class="dim">—</span>'}},
  {k:'tasks',l:'Tasks',n:true},{k:'done',l:'Concluídas',n:true},{k:'pctT',l:'% Tasks',n:true,tip:TIPS.pctT,r:d=>'<div class="hl"><span style="min-width:34px;text-align:right">'+pc(d.pctT)+'</span>'+pbar(d.pctT)+'</div>'},
  {k:'pctH',l:'% horas',n:true,tip:TIPS.pctH,r:d=>pc(d.pctH)},
@@ -513,12 +513,12 @@ function pgHist(){const sn=snapsSorted();const cs=curSnap();const idB=ST.cmpB||s
  const A=sn.find(s=>s.id===idA)||sn[0],B=sn.find(s=>s.id===idB)||sn[sn.length-1];
  const tA=filt(A.tasks),tB=filt(B.tasks);const mA=new Map(tA.map(t=>[t.id,t])),mB=new Map(tB.map(t=>[t.id,t]));
  const doneNow=tB.filter(t=>isDone(t.s)&&(!mA.has(t.id)||!isDone(mA.get(t.id).s)));
- const novas=tB.filter(t=>!mA.has(t.id));const reab=tB.filter(t=>mA.has(t.id)&&isDone(mA.get(t.id).s)&&!isDone(t.s));
+ const hm=cmpMode(A,B),idsA=new Set(catMap(A).keys());const novas=hm==='metodologia'?[]:tB.filter(t=>!idsA.has(t.id));const reab=tB.filter(t=>mA.has(t.id)&&isDone(mA.get(t.id).s)&&!isDone(t.s));
  const regs=regressions(tB,tA);const ow=tB.filter(t=>mA.has(t.id)&&t.r!==mA.get(t.id).r&&!(A.demo));
  const tAm=totals(tA),tBm=totals(tB);const dA=calcDemands(tA,{snap:A,noPrev:true}),dB=calcDemands(tB,{snap:B,noPrev:true});
  const dlt=(v,f,inv)=>'<span class="'+(v===0?'':((v>0)!==!!inv?'grn':'red'))+'">'+(v>0?'+':'')+(f||f1)(v)+'</span>';
  const pers=n=>uniq(n.filter(t=>!isDone(t.s)&&t.r&&t.rem>0).map(t=>t.r)).length;
- const kp='<div class="grid g-kpi" style="margin-bottom:14px">'+kpi('Tasks concluídas no período',doneNow.length,'Done em '+fd(B.date)+' e não em '+fd(A.date),'grn')+kpi('Novas Tasks',novas.length,'+'+fh(sum(novas,t=>t.est))+' estimadas',novas.length?'yel':'')+kpi('Tasks reabertas',reab.length+regs.length,regs.length+' regressão(ões) de estado',(reab.length+regs.length)?'red':'grn')+kpi('Crescimento de horas estimadas',(tBm.est-tAm.est>=0?'+':'')+f1(tBm.est-tAm.est)+' h','',tBm.est>tAm.est?'yel':'')+kpi('Variação de horas restantes',(tBm.rem-tAm.rem>=0?'+':'')+f1(tBm.rem-tAm.rem)+' h','de '+f1(tAm.rem)+' para '+f1(tBm.rem),tBm.rem>tAm.rem?'red':'grn')+kpi('Mudanças de responsável',A.demo?'n/d':ow.length,A.demo?'snapshot demo sem responsável histórico':'')+kpi('Evolução % por horas',(tBm.pctH-tAm.pctH>=0?'+':'')+f1((tBm.pctH-tAm.pctH)*100)+' p.p.',pc(tAm.pctH)+' → '+pc(tBm.pctH),'blue')+kpi('Dias de trabalho do time',f1(tBm.rem/ST.cfg.cap),'horas restantes ÷ '+ST.cfg.cap+' h; '+pers(tB)+' pessoa(s) com horas (antes '+f1(tAm.rem/ST.cfg.cap)+' / '+pers(tA)+')')+'</div>';
+ const kp='<div class="grid g-kpi" style="margin-bottom:14px">'+kpi('Tasks concluídas no período',doneNow.length,'Done em '+fd(B.date)+' e não em '+fd(A.date),'grn')+kpi('Novas Tasks',hm==='metodologia'?'n/v':novas.length,hm==='metodologia'?'mudança de metodologia: entrada de escopo não verificável':'+'+fh(sum(novas,t=>t.est))+' estimadas',novas.length?'yel':'')+kpi('Tasks reabertas',reab.length+regs.length,regs.length+' regressão(ões) de estado',(reab.length+regs.length)?'red':'grn')+kpi('Crescimento de horas estimadas',(tBm.est-tAm.est>=0?'+':'')+f1(tBm.est-tAm.est)+' h','',tBm.est>tAm.est?'yel':'')+kpi('Variação de horas restantes',(tBm.rem-tAm.rem>=0?'+':'')+f1(tBm.rem-tAm.rem)+' h','de '+f1(tAm.rem)+' para '+f1(tBm.rem),tBm.rem>tAm.rem?'red':'grn')+kpi('Mudanças de responsável',A.demo?'n/d':ow.length,A.demo?'snapshot demo sem responsável histórico':'')+kpi('Evolução % por horas',(tBm.pctH-tAm.pctH>=0?'+':'')+f1((tBm.pctH-tAm.pctH)*100)+' p.p.',pc(tAm.pctH)+' → '+pc(tBm.pctH),'blue')+kpi('Dias de trabalho do time',f1(tBm.rem/ST.cfg.cap),'horas restantes ÷ '+ST.cfg.cap+' h; '+pers(tB)+' pessoa(s) com horas (antes '+f1(tAm.rem/ST.cfg.cap)+' / '+pers(tA)+')')+'</div>';
  const rows=dB.map(b=>{const a=dA.find(x=>x.id===b.id)||{};return{id:b.id,short:b.short,a,b}});
  const tab=sortTable('hist',[{k:'id',l:'Demanda',r:r=>'<b class="mono">'+r.id+'</b> '+esc(r.short)},{k:'pa',l:'% horas A',n:true,v:r=>r.a.pctH,r:r=>pc(r.a.pctH)},{k:'pb',l:'% horas B',n:true,v:r=>r.b.pctH,r:r=>pc(r.b.pctH)},{k:'dp',l:'Δ p.p.',n:true,v:r=>(r.b.pctH||0)-(r.a.pctH||0),r:r=>dlt(((r.b.pctH||0)-(r.a.pctH||0))*100,f0)},{k:'ta',l:'Tasks Done A→B',n:true,v:r=>(r.b.done||0)-(r.a.done||0),r:r=>(r.a.done||0)+' → '+r.b.done},{k:'nt',l:'Novas Tasks',n:true,v:r=>(r.b.tasks||0)-(r.a.tasks||0),r:r=>dlt((r.b.tasks||0)-(r.a.tasks||0),f0,true)},{k:'ra',l:'Restantes A→B',n:true,v:r=>r.b.rem-(r.a.rem||0),r:r=>f1(r.a.rem||0)+' → '+f1(r.b.rem)+' ('+dlt(r.b.rem-(r.a.rem||0),f1,true)+')'}],rows,{def:{k:'dp',d:-1}});
  const ch1=barChart({cats:rows.map(r=>String(r.id)),series:[{name:fd(A.date)+' (A)',vals:rows.map(r=>(r.a.pctH||0)*100),color:PAL[9]},{name:fd(B.date)+' (B)',vals:rows.map(r=>(r.b.pctH||0)*100),color:PAL[0]}],max:100,fmt:v=>f0(v)+'%',aria:'Evolução por demanda',labels:true});
@@ -529,7 +529,7 @@ function pgHist(){const sn=snapsSorted();const cs=curSnap();const idB=ST.cmpB||s
  const first=sn[0],last=sn[sn.length-1],prev=sn.length>1?sn[sn.length-2]:null;
  const presets='<div class="row"><span class="dim">Comparar:</span><button class="btn sm" data-act="preset" data-a="'+(prev?prev.id:first.id)+'" data-b="'+last.id+'">Hoje × ontem/anterior</button><button class="btn sm" data-act="preset" data-a="'+first.id+'" data-b="'+last.id+'">Hoje × primeiro snapshot</button><button class="btn sm" disabled title="Exige snapshots por sprint; ainda não há histórico de sprint anterior">Sprint atual × anterior (sem dado)</button><span class="sp"></span><label class="row" style="gap:6px">A '+sel('cmpA',A.id)+'</label><label class="row" style="gap:6px">B '+sel('cmpB',B.id)+'</label></div>';
  const lst='<div class="tw"><table><thead><tr><th>Snapshot</th><th>Data</th><th>Origem</th><th class="n">Tasks</th><th class="n">Restantes</th></tr></thead><tbody>'+sn.map(s=>'<tr><td><b>'+esc(s.label)+'</b></td><td>'+fdy(s.date)+'</td><td>'+esc(s.origin)+'</td><td class="n">'+s.tasks.length+'</td><td class="n">'+f1(totals(s.tasks).rem)+' h</td></tr>').join('')+'</tbody></table></div>';
- return '<h1>Histórico e Evolução do Delivery</h1><p class="sub">Cada atualização é uma fotografia (snapshot) preservada; os anteriores nunca são sobrescritos. Os filtros globais também valem aqui.</p>'+card('Comparar snapshots',presets+(A.id===B.id?'<div class="note y">A e B são o mesmo snapshot.</div>':'')+(A.demo?'<div class="note">'+esc(A.note||'')+'</div>':''),'')+'<div style="height:14px"></div>'+kp+
+ return '<h1>Histórico e Evolução do Delivery</h1><p class="sub">Cada atualização é uma fotografia (snapshot) preservada; os anteriores nunca são sobrescritos. Os filtros globais também valem aqui.</p>'+card('Comparar snapshots',presets+(A.id===B.id?'<div class="note y">A e B são o mesmo snapshot.</div>':'')+(A.demo?'<div class="note">'+esc(A.note||'')+'</div>':''),'')+'<div style="height:14px"></div>'+cmpCard(A,B)+kp+
  '<div class="grid g2" style="margin-bottom:14px">'+card('Evolução percentual por demanda (horas)',ch1,'A × B')+card('Tendência de horas',ch2,'Restantes e sem responsável por snapshot')+card('Tendência de Tasks',ch3,'Concluídas e total por snapshot')+card('Snapshots preservados',lst+'<div class="row" style="margin-top:10px"><input type="text" id="snlab" placeholder="Rótulo do novo snapshot (opcional)" style="flex:1;min-width:200px"><button class="btn pri" data-act="mksnap">Gerar snapshot agora</button></div><div class="dim" style="font-size:11.5px;margin-top:6px">Grava uma cópia do estado atual com a data de referência. Persistência: '+(ST.persist==='db'?'compartilhada (db do artefato)':'somente nesta sessão')+'.</div>','Append-only')+'</div>'+
  card('Variação por demanda',tab,'A = '+esc(A.label)+' · B = '+esc(B.label))}
 /* ============ PÁGINA 7: PLANO DE AÇÃO ============ */
@@ -554,10 +554,10 @@ function pgAct(){const A=ST.actions;const pend=A.filter(a=>a.status==='Pendente'
 
 /* ============ PERSISTÊNCIA ============ */
 let DBH=null;
-const packSnap=s=>({id:s.id,date:s.date,label:s.label,origin:s.origin,ts:s.ts||Date.now(),note:s.note||'',rows:s.tasks.map(t=>[t.id,t.d,t.s,t.r||'',t.est||0,t.rem||0,t.cons||0,t.cw||0,t.it||'']),meta:s.meta||{},ado:s.ado||null,oth:s.oth||null,auto:!!s.auto});
+const packSnap=s=>Object.assign({id:s.id,date:s.date,label:s.label,origin:s.origin,ts:s.ts||Date.now(),note:s.note||'',rows:s.tasks.map(t=>[t.id,t.d,t.s,t.r||'',t.est||0,t.rem||0,t.cons||0,t.cw||0,t.it||'']),meta:s.meta||{},ado:s.ado||null,oth:s.oth||null,auto:!!s.auto},s.contrato!=null?{contrato:s.contrato,universo:s.universo,inconc:s.inconc||[],orf:s.orf||[],logica:s.logica||null}:{});
 /* Demandas vindas do snapshot (todas as demandas do ADO): acrescenta as novas a DEM e atualiza título, entrega, estado e cliente. */
 function mergeDem(l){if(!Array.isArray(l)||!l.length)return;l.forEach(x=>{if(!x||x.id==null)return;if(x.cli)CLIMAP[x.id]=x.cli;if(x.st)DEMST[x.id]=x.st;let m=DEM.find(y=>y.id===x.id);if(!m){m={id:x.id,t:x.t||String(x.id),short:x.short||x.t||String(x.id),ado:x.ado||null};DEM.push(m);ADO0[x.id]=m.ado}else{if(x.t)m.t=x.t;if(x.short)m.short=x.short;if(x.ado&&!ADO0[x.id])ADO0[x.id]=x.ado}});DEM.sort((a,b)=>a.id-b.id)}
-const unpackSnap=d=>{const m=d.meta||{};if(d.dst)Object.keys(d.dst).forEach(k=>{if(d.dst[k])DEMST[k]=d.dst[k]});if(d.cli)Object.keys(d.cli).forEach(k=>{if(d.cli[k])CLIMAP[k]=d.cli[k]});mergeDem(d.dem);Object.keys(m).forEach(k=>{if(!META[k])META[k]=m[k]});return{id:d.id,date:d.date,label:d.label,origin:d.origin,ts:d.ts,note:d.note,meta:m,ado:d.ado||null,oth:d.oth||null,auto:!!d.auto,tasks:(d.rows||[]).map(r=>({id:r[0],d:r[1],s:r[2],r:r[3]||null,est:r[4],rem:r[5],cons:r[6],cw:r[7],it:r[8]}))}};
+const unpackSnap=d=>{const chk=checkDoc(d);if(chk.err)return{id:d&&d.id,date:d&&d.date,label:d&&d.label,incompat:chk.err,tasks:[]};const m=d.meta||{};if(d.dst)Object.keys(d.dst).forEach(k=>{if(d.dst[k])DEMST[k]=d.dst[k]});if(d.cli)Object.keys(d.cli).forEach(k=>{if(d.cli[k])CLIMAP[k]=d.cli[k]});mergeDem(d.dem);Object.keys(m).forEach(k=>{if(!META[k])META[k]=m[k]});return{id:d.id,date:d.date,label:d.label,origin:d.origin,ts:d.ts,note:d.note,meta:m,ado:d.ado||null,oth:d.oth||null,auto:!!d.auto,contrato:chk.ver===1?1:undefined,universo:d.universo,inconc:chk.ver===1?(d.inconc||[]):[],orf:chk.ver===1?(d.orf||[]):[],logica:d.logica||null,tasks:(d.rows||[]).map(r=>({id:r[0],d:r[1],s:r[2],r:r[3]||null,est:r[4],rem:r[5],cons:r[6],cw:r[7],it:r[8]}))}};
 function memPut(c,obj){const arr=c==='snapshots'?ST.snaps:ST[c];const i=arr.findIndex(x=>x.id===obj.id);if(i>=0)arr[i]=obj;else arr.push(obj)}
 function memDel(c,id){const arr=c==='snapshots'?ST.snaps:ST[c];const i=arr.findIndex(x=>x.id===id);if(i>=0)arr.splice(i,1)}
 async function pset(c,obj){const doc=c==='snapshots'?packSnap(obj):obj;
@@ -573,12 +573,13 @@ async function loadStaticSnaps(){
     const docs=(await Promise.all(files.map(f=>fetch('./snapshots/'+f,{cache:'no-cache'}).then(x=>x.ok?x.json():null).catch(()=>null)))).filter(Boolean);
     if(DBH||!docs.length)return;
     const demo=ST.snaps.filter(x=>x.demo);
-    ST.snaps=demo.concat(docs.map(unpackSnap).sort((a,b)=>(a.ts||0)-(b.ts||0)));
+    const all=docs.map(unpackSnap);ST.warn=all.filter(x=>x.incompat).map(x=>({id:x.id,msg:x.incompat}));ST.snaps=demo.concat(all.filter(x=>!x.incompat).sort((a,b)=>(a.ts||0)-(b.ts||0)));
     render();
   }catch(e){console.warn(e)}
 }
 async function initCaps(){
  loadStaticSnaps();
+
  try{if(!(window.claude&&claude.use))return;
   claude.use('sample').then(s=>{ST.sample=s;if(ST.page==='ai')render()}).catch(()=>{});
   claude.use('downloads').then(s=>{ST.dl=s}).catch(()=>{});
@@ -587,7 +588,7 @@ async function initCaps(){
   const upd=()=>{ST.persist='db';clearTimeout(t);renderKeep()};
   db.collection('actions').onSnapshot(s=>{ST.actions=s.docs.map(d=>d.data());upd()},e=>console.warn(e));
   db.collection('notes').onSnapshot(s=>{ST.notes=s.docs.map(d=>d.data());upd()},e=>console.warn(e));
-  db.collection('snapshots').onSnapshot(s=>{const demo=ST.snaps.filter(x=>x.demo);ST.snaps=demo.concat(s.docs.map(d=>unpackSnap(d.data())));upd()},e=>console.warn(e));
+  db.collection('snapshots').onSnapshot(s=>{const demo=ST.snaps.filter(x=>x.demo);const all=s.docs.map(d=>unpackSnap(d.data()));ST.warn=all.filter(x=>x.incompat).map(x=>({id:x.id,msg:x.incompat}));ST.snaps=demo.concat(all.filter(x=>!x.incompat));upd()},e=>console.warn(e));
   db.doc('config/main').onSnapshot(s=>{if(s.exists){const d=s.data();if(d.cfg)Object.assign(ST.cfg,d.cfg);if(d.gmap)Object.assign(ST.gmap,d.gmap)}upd()},e=>console.warn(e));
  }catch(e){console.warn(e)}}
 function saveCfg(){if(DBH)DBH.doc('config/main').set({cfg:ST.cfg,gmap:ST.gmap}).catch(e=>console.warn(e))}
@@ -722,7 +723,82 @@ function pgData(){const cs=curSnap(),sn=snapsSorted();const cfg=ST.cfg;const bl=
  card('Importar dados (CSV / Excel)',imp,'Valida estrutura, mapeia colunas, aponta duplicidades e erros, e só aplica após confirmação')+'<div style="height:14px"></div>'+card('Configuração e regras de cálculo',conf,'Premissas editáveis; alterações recalculam todo o painel')+'<div class="grid g2" style="margin-top:14px">'+card('Integração com o Azure DevOps (fase 2)',ado,'Backend seguro, sem PAT no frontend')+card('Limitações conhecidas',lim,'')+'</div>'}
 /* ============ NAVEGAÇÃO / RENDER ============ */
 const IC={exec:'<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>',dem:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/>',cap:'<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5a3 3 0 010 6M18 14c2 .6 3 2.4 3 6"/>',risk:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.01"/>',fc:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',hist:'<path d="M3 12a9 9 0 109-9 9 9 0 00-7 3.5L3 9"/><path d="M3 3v6h6M12 7v5l3 2"/>',act:'<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2h9"/>',ai:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',data:'<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>'};
-const NAV=[['exec','Visão Executiva',pgExec],['dem','Gestão de Demandas',pgDem],['cap','Capacidade e Alocação',pgCap],['risk','Radar de Riscos',pgRisk],['fc','Previsibilidade e Prazos',pgFc],['hist','Histórico e Snapshots',pgHist],['act','Plano de Ação',pgAct],['ai','Delivery AI',pgAi],['data','Dados & Configuração',pgData]];
+/* ===== Contrato de dados v1.5: validação do snapshot (espelha contrato_check_rev4) ===== */
+const isInt=v=>typeof v==='number'&&Number.isInteger(v);
+const okH=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0;
+function checkDoc(d){
+ if(!d||typeof d!=='object'||Array.isArray(d))return{err:'snapshot não é um objeto'};
+ if(!Object.prototype.hasOwnProperty.call(d,'contrato')){if(!Array.isArray(d.rows))return{err:"chave 'rows' ausente ou não é lista (legado)"};return{ver:'legado'}}
+ if(d.contrato!==1)return{err:'Contrato '+JSON.stringify(d.contrato)+' desconhecido: processamento interrompido (incompatibilidade)'};
+ for(const k of ['rows','inconc','orf','dem'])if(!Array.isArray(d[k]))return{err:"'"+k+"' ausente ou não é lista (contrato 1)"};
+ if(d.oth!=null){if(!Array.isArray(d.oth))return{err:"'oth' não é lista"};for(let i=0;i<d.oth.length;i++){const o=d.oth[i];if(!o||typeof o!=='object'||Array.isArray(o)||!('id' in o))return{err:'oth['+i+']: item malformado'}}}
+ const dem=new Set();for(const x of d.dem){if(!x||!isInt(x.id))return{err:'dem: item malformado'};if(dem.has(x.id))return{err:'dem: demanda '+x.id+' duplicada'};dem.add(x.id)}
+ const seen=new Set();const NM=['est','rem','cons','cw'];
+ const hrs=(cat,id,a)=>{for(let i=0;i<4;i++)if(!okH(a[i]))return cat+' id='+id+' campo='+NM[i]+': valor '+JSON.stringify(a[i])+' inválido (esperado número finito não negativo)';return null};
+ for(let i=0;i<d.rows.length;i++){const r=d.rows[i];
+  if(!Array.isArray(r)||r.length<8)return{err:'rows['+i+']: registro malformado (mínimo 8 posições)'};
+  if(!isInt(r[0]))return{err:'rows['+i+']: ID não inteiro'};
+  if(seen.has(r[0]))return{err:'ID '+r[0]+' duplicado'};seen.add(r[0]);
+  if(!isInt(r[1]))return{err:'rows id='+r[0]+' campo=demanda: valor inválido (esperado inteiro)'};
+  if(!dem.has(r[1]))return{err:'rows id='+r[0]+' campo=demanda: demanda '+r[1]+' inexistente em dem'};
+  const e=hrs('rows',r[0],r.slice(4,8));if(e)return{err:e}}
+ for(const cat of ['inconc','orf'])for(const x of d[cat]){
+  if(!x||typeof x!=='object'||Array.isArray(x)||!isInt(x.id))return{err:cat+': registro malformado ou ID não inteiro'};
+  if(seen.has(x.id))return{err:'ID '+x.id+' duplicado'};seen.add(x.id);
+  const e=hrs(cat,x.id,[x.est,x.rem,x.cons,x.cw]);if(e)return{err:e};
+  if(x.cands!=null){if(!Array.isArray(x.cands)||!x.cands.length)return{err:cat+' id='+x.id+' campo=cands: esperado lista não vazia'};
+   const ids=x.cands.map(c=>c&&typeof c==='object'?c.id:c);
+   if(ids.some(i=>!isInt(i))||new Set(ids).size!==ids.length)return{err:cat+' id='+x.id+' campo=cands: candidata inválida ou repetida'};
+   if(ids.some(i=>!dem.has(i)))return{err:cat+' id='+x.id+' campo=cands: candidata inexistente em dem'}}}
+ if(d.universo!==seen.size)return{err:"universo="+JSON.stringify(d.universo)+" difere do tamanho da partição ("+seen.size+")"};
+ return{ver:1}}
+const verOf=s=>s&&s.contrato===1?1:'legado';
+const cmpMode=(a,b)=>{const la=verOf(a)==='legado',lb=verOf(b)==='legado';return la&&lb?'legado-legado':(la||lb)?'metodologia':'contrato1'};
+function catMap(s){const m=new Map();(s.tasks||[]).forEach(t=>m.set(t.id,{c:'rows',d:t.d}));(s.inconc||[]).forEach(x=>m.set(x.id,{c:'inconc',d:null}));(s.orf||[]).forEach(x=>m.set(x.id,{c:'orf',d:null}));return m}
+/* comparação por ID (regras aprovadas): reassociação, perda/recuperação, mudança de classificação, entrada/saída de escopo; legado = mudança de metodologia */
+function cmpSnaps(A,B){const ma=catMap(A),mb=catMap(B),la=verOf(A)==='legado',lb=verOf(B)==='legado';
+ const modo=la&&lb?'legado-legado':(la||lb)?'metodologia':'contrato1';const ev={},notas={};const add=(o,k,t)=>{(o[k]=o[k]||[]).push(t)};
+ const othA=la?new Set((A.oth||[]).map(o=>o&&o.id).filter(isInt)):new Set(),othB=lb?new Set((B.oth||[]).map(o=>o&&o.id).filter(isInt)):new Set();
+ const MET={'perda de associação':'possível perda de associação (mudança de metodologia)','associação recuperada':'possível associação recuperada (mudança de metodologia)','reassociação entre demandas':'reassociação indicativa (mudança de metodologia)','mudança de classificação da qualidade':'mudança de classificação (mudança de metodologia)'};
+ new Set([...ma.keys(),...mb.keys()]).forEach(t=>{const a=ma.get(t),b=mb.get(t);
+  if(!a){if(la){add(ev,'entrada não verificável (legado)',t);if(othA.has(t))add(notas,'ID presente em oth do legado anterior (classificação inalterada)',t)}else add(ev,'entrada de escopo',t);return}
+  if(!b){if(lb){add(ev,'saída não verificável (legado)',t);if(othB.has(t))add(notas,'ID presente em oth do legado atual (classificação inalterada)',t)}else add(ev,'saída de escopo',t);return}
+  let k=null;
+  if(a.c==='rows'&&b.c==='rows')k=a.d===b.d?null:'reassociação entre demandas';
+  else if(a.c==='rows')k='perda de associação';
+  else if(b.c==='rows')k='associação recuperada';
+  else k=a.c===b.c?null:'mudança de classificação da qualidade';
+  if(!k)return;if(modo==='metodologia')k=MET[k];add(ev,k,t)});
+ Object.values(ev).forEach(a=>a.sort((x,y)=>x-y));Object.values(notas).forEach(a=>a.sort((x,y)=>x-y));return{modo,ev,notas}}
+function capTot(s){const sm=(a,k)=>a.reduce((x,t)=>x+(t[k]||0),0);const g=a=>({n:a.length,est:sm(a,'est'),rem:sm(a.filter(t=>!isDone(t.s)),'rem'),cons:sm(a.filter(t=>!isDone(t.s)),'cons'),cw:sm(a,'cw')});
+ const r=g(s.tasks||[]),i=g(s.inconc||[]),o=g(s.orf||[]);return{rows:r,inc:i,orf:o,all:{n:r.n+i.n+o.n,est:r.est+i.est+o.est,rem:r.rem+i.rem+o.rem,cons:r.cons+i.cons+o.cons,cw:r.cw+i.cw+o.cw}}}
+const MODOTXT={'contrato1':'Contrato 1 × Contrato 1','metodologia':'Mudança de metodologia (legado × contrato 1): perdas, recuperações e reassociações são indicativas; entradas e saídas de escopo não são afirmadas','legado-legado':'Legado × legado: reassociação visível; entradas e saídas não verificáveis'};
+function warnBanner(cs){let h='';(ST.warn||[]).forEach(w=>{h+='<div class="banner" style="background:var(--red-bg);border-color:var(--red);color:var(--red)"><b>Snapshot ignorado ('+esc(w.id)+'):</b> '+esc(w.msg)+'</div>'});
+ if(cs&&verOf(cs)==='legado'&&!cs.demo)h+='<div class="banner"><b>Metodologia legada:</b> este snapshot não classifica Tasks inconclusivas ou sem associação. A ausência dessas listas não significa que todas as Tasks estejam associadas.</div>';return h}
+function qualBlock(){const cs=curSnap();if(!cs||cs.demo)return'';
+ if(verOf(cs)==='legado')return'<div class="note y" style="margin-bottom:14px"><b>Qualidade da associação indisponível:</b> snapshot em metodologia legada, sem as listas de Tasks inconclusivas e sem associação. Isso não indica que todas as Tasks estejam associadas.</div>';
+ const T=capTot(cs);
+ return'<div class="grid g-kpi" style="margin-bottom:14px">'+kpi('Esforço total capturado',fh(T.all.est),T.all.n+' Tasks nas três categorias · restam '+fh(T.all.rem),'blue')+kpi('Atribuído às demandas',fh(T.rows.est),T.rows.n+' Tasks associadas · restam '+fh(T.rows.rem),'grn')+kpi('Inconclusivas',T.inc.n,fh(T.inc.est)+' est. · restam '+fh(T.inc.rem)+' (fora das demandas)',T.inc.n?'yel':'grn')+kpi('Sem associação',T.orf.n,fh(T.orf.est)+' est. · restam '+fh(T.orf.rem)+' (fora das demandas)',T.orf.n?'yel':'grn')+'</div><div class="dim" style="font-size:11.5px;margin:-6px 0 14px">Indicadores desta faixa não usam os filtros globais. Detalhes na página <a href="#qual" data-nav="qual">Qualidade da Associação</a>.</div>'}
+function cmpCard(A,B){if(A.id===B.id)return'';const R=cmpSnaps(A,B);const labs=Object.keys(R.ev).sort();
+ const tA=capTot(A),tB=capTot(B);const la=verOf(A)==='legado',lb=verOf(B)==='legado';
+ const ttl=id=>{const m=META[id];return m&&m.t?' '+esc(m.t.length>46?m.t.slice(0,46)+'…':m.t):''};
+ const rows=labs.map(k=>'<tr><td><b>'+esc(k)+'</b></td><td class="n">'+R.ev[k].length+'</td><td class="mono" style="white-space:normal;font-size:11.5px">'+R.ev[k].slice(0,14).map(i=>i+ttl(i)).join(' · ')+(R.ev[k].length>14?' …':'')+'</td></tr>').join('');
+ const nts=Object.keys(R.notas).map(k=>'<div class="dim" style="font-size:11.5px">Nota: '+esc(k)+': '+R.notas[k].slice(0,14).join(', ')+(R.notas[k].length>14?' …':'')+'</div>').join('');
+ const cap=(la||lb)?'':'<div class="grid g-kpi" style="margin:10px 0">'+kpi('Esforço total capturado A → B',f1(tA.all.est)+' → '+f1(tB.all.est)+' h',tA.all.n+' → '+tB.all.n+' Tasks','blue')+kpi('Atribuído às demandas A → B',f1(tA.rows.est)+' → '+f1(tB.rows.est)+' h',tA.rows.n+' → '+tB.rows.n+' Tasks','grn')+'</div>';
+ return card('Comparação por ID (contrato de dados)','<div class="note'+(R.modo==='contrato1'?'':' y')+'">'+esc(MODOTXT[R.modo])+'</div>'+cap+(rows?'<div class="tw"><table><thead><tr><th>Classificação</th><th class="n">Tasks</th><th>IDs (amostra)</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">Sem mudanças por ID entre A e B.</div>')+nts,'Uma Task presente nos dois snapshots nunca é entrada ou saída de escopo; mudança de demanda ou de categoria é reassociação ou mudança de qualidade')+'<div style="height:14px"></div>'}
+function pgQual(){const cs=curSnap();
+ const hd='<h1>Qualidade da Associação</h1><p class="sub">Tasks inconclusivas (evidência insuficiente ou conflitante) e sem associação (nenhuma evidência liga a Task a uma demanda). Não entram nos indicadores por demanda.</p>';
+ if(!cs||verOf(cs)==='legado')return hd+'<div class="note y"><b>Snapshot em metodologia legada.</b> Este snapshot não traz as listas de Tasks inconclusivas e sem associação; a ausência delas não significa que todas as Tasks estejam associadas. Os indicadores desta página aparecem a partir do primeiro snapshot de contrato 1.</div>';
+ const T=capTot(cs);const dmN=id=>{const d=DEM.find(x=>x.id===id);return d?id+' '+d.short:String(id)};
+ const cands=r=>(r.cands||[]).map(c=>{const id=c&&typeof c==='object'?c.id:c;return '<span class="pill y" title="'+esc(c&&c.t||'')+'">'+esc(dmN(id))+'</span>'}).join(' ')+(r.sug?' <span class="dim">(sugestão textual)</span>':'');
+ const base=[{k:'id',l:'Task',r:r=>'<b class="mono">'+r.id+'</b>'},{k:'t',l:'Título',r:r=>esc(r.t)},{k:'tp',l:'Tipo',r:r=>esc(r.tp||'')},{k:'s',l:'Estado',r:r=>esc(r.s||'')},{k:'r',l:'Responsável',r:r=>esc(r.r||'—')},{k:'est',l:'Est. (h)',n:true,r:r=>f1(r.est)},{k:'rem',l:'Rest. (h)',n:true,r:r=>f1(r.rem)}];
+ const tInc=sortTable('qinc',base.concat([{k:'c',l:'Demandas candidatas',v:r=>(r.cands||[]).length,r:cands},{k:'tier',l:'Nível',r:r=>esc(r.tier||'')},{k:'m',l:'Motivo',v:r=>r.motivo||'',r:r=>'<span class="dim" style="white-space:normal">'+esc(r.motivo||'')+'</span>'}]),cs.inconc||[],{def:{k:'id',d:1}});
+ const tOrf=sortTable('qorf',base.concat([{k:'pai',l:'Pai',n:true,r:r=>r.pai||'—'},{k:'m',l:'Motivo',v:r=>r.motivo||'',r:r=>'<span class="dim" style="white-space:normal">'+esc(r.motivo||'')+'</span>'}]),cs.orf||[],{def:{k:'id',d:1}});
+ const kp='<div class="grid g-kpi" style="margin-bottom:14px">'+kpi('Esforço total capturado',fh(T.all.est),T.all.n+' Tasks · restam '+fh(T.all.rem),'blue')+kpi('Atribuído às demandas',fh(T.rows.est),T.rows.n+' Tasks · restam '+fh(T.rows.rem),'grn')+kpi('Inconclusivas',T.inc.n,fh(T.inc.est)+' est. · restam '+fh(T.inc.rem),T.inc.n?'yel':'grn')+kpi('Sem associação',T.orf.n,fh(T.orf.est)+' est. · restam '+fh(T.orf.rem),T.orf.n?'yel':'grn')+kpi('Universo',cs.universo!=null?cs.universo:T.all.n,'Tasks nas três categorias')+'</div>';
+ const lg=cs.logica?'<div class="dim" style="font-size:11.5px;margin-bottom:14px">Regra de associação v'+esc(cs.logica.versao||'?')+'. Níveis: E1 hierarquia, E2 raiz manual, E3 Related, E4s texto forte, E4w texto fraco. Empate no nível mais forte = inconclusiva (nunca o menor id).</div>':'';
+ return hd+kp+lg+card('Inconclusivas ('+T.inc.n+')',T.inc.n?tInc:'<div class="empty">Nenhuma Task inconclusiva.</div>','Candidatas exibidas como sugestão; as horas não são somadas à demanda')+'<div style="height:14px"></div>'+card('Sem associação ('+T.orf.n+')',T.orf.n?tOrf:'<div class="empty">Nenhuma Task sem associação.</div>','Sem demanda; as horas aparecem no esforço total capturado')}
+IC.qual='<path d="M12 3l8 4v5c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/>';
+const NAV=[['exec','Visão Executiva',pgExec],['dem','Gestão de Demandas',pgDem],['qual','Qualidade da Associação',pgQual],['cap','Capacidade e Alocação',pgCap],['risk','Radar de Riscos',pgRisk],['fc','Previsibilidade e Prazos',pgFc],['hist','Histórico e Snapshots',pgHist],['act','Plano de Ação',pgAct],['ai','Delivery AI',pgAi],['data','Dados & Configuração',pgData]];
 function renderNav(){$('#nav').innerHTML=NAV.map(n=>'<button data-nav="'+n[0]+'" class="'+(ST.page===n[0]?'on':'')+'"><svg viewBox="0 0 24 24">'+IC[n[0]]+'</svg>'+esc(n[1])+(n[0]==='risk'&&CX?'<span class="bd">'+CX.risks.filter(r=>r.sev==='crit'||r.sev==='alta').length+'</span>':'')+'</button>').join('')}
 const PLAT=(()=>{try{return document.documentElement.getAttribute('data-theme')}catch(_){return null}})();
 function themePref(){try{const v=localStorage.getItem('odi-theme');return v==='dark'||v==='light'?v:'auto'}catch(_){return'auto'}}
@@ -733,8 +809,8 @@ const TH_IC={auto:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height=
 const themeSeg=()=>'<span class="seg" role="group" aria-label="Tema" style="align-self:flex-end">'+[['auto','Automático (segue o sistema)'],['light','Tema claro'],['dark','Tema escuro']].map(([k,l])=>'<button type="button" data-act="theme" data-v="'+k+'" title="'+l+'" aria-label="'+l+'" aria-pressed="'+(ST.theme===k)+'" class="'+(ST.theme===k?'on':'')+'">'+TH_IC[k]+'</button>').join('')+'</span>';
 function renderFilters(){const cs=curSnap();const all=cs.tasks;const opt=(v,l,cur)=>'<option value="'+esc(v)+'"'+(String(cur)===String(v)?' selected':'')+'>'+esc(l)+'</option>';
  $('#filters').innerHTML='<label>Demanda<select data-f="d">'+opt('','Todas',ST.f.d)+DEM.filter(d=>(!ST.f.c||cliOf(d.id)===ST.f.c)&&(demVisible(d.id)||String(d.id)===String(ST.f.d))).map(d=>opt(d.id,d.id+' · '+d.short,ST.f.d)).join('')+'</select></label><label>Cliente<select data-f="c">'+opt('','Todos',ST.f.c)+uniq(DEM.filter(d=>demVisible(d.id)).map(d=>cliOf(d.id)).filter(Boolean)).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>opt(n,n,ST.f.c)).join('')+'</select></label><label>Responsável<select data-f="r">'+opt('','Todos',ST.f.r)+opt(NOSEL,NOSEL,ST.f.r)+uniq(all.map(t=>t.r).filter(Boolean)).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>opt(n,n,ST.f.r)).join('')+'</select></label><label>Sprint<select data-f="s">'+opt('','Todas',ST.f.s)+sprints().map(n=>opt(n,n,ST.f.s)).join('')+'</select></label><label>Status<select data-f="g">'+opt('','Todos',ST.f.g)+Object.entries(GROUPS).map(([k,v])=>opt(k,v,ST.f.g)).join('')+'</select></label><label class="chk" style="display:flex;flex-direction:row;align-items:center;gap:7px;align-self:flex-end;white-space:nowrap;padding-bottom:8px;cursor:pointer"><input type="checkbox" data-f="k" style="width:auto"'+(ST.f.k?' checked':'')+'>Mostrar concluídas</label>'+(ST.f.d||ST.f.c||ST.f.r||ST.f.s||ST.f.g||ST.f.k?'<button class="btn sm" data-act="clrf" style="align-self:flex-end">Limpar filtros</button>':'')+'<span class="sp"></span><span class="dim" style="align-self:flex-end;font-size:12px">'+CX.tasks.length+' de '+cs.tasks.length+' Tasks</span>'+themeSeg()+shotBtn()}
-function renderBanner(){const cs=curSnap();$('#banner').innerHTML=cs.demo?'<div class="banner"><b>Dados históricos de demonstração.</b> Baseline do ADO (4TAX-OUTBOUND) de '+fdy(cs.date)+', usado para validar os indicadores. Não é a leitura atual do Azure DevOps.<span class="sp"></span><button class="btn sm" data-nav="data">Importar dados</button></div>':'<div class="banner" style="background:var(--blue-bg);border-color:rgba(59,130,246,.4);color:var(--blue2)">Fonte: <b>'+esc(cs.origin)+'</b> · snapshot de '+fdy(cs.date)+(cs.auto&&cs.ts?' · atualizado em '+new Date(cs.ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'')+'.</div>'}
-function renderFoot(){const cs=curSnap();$('#sfoot').innerHTML='Snapshot: <b>'+esc(cs.label)+'</b><br>Persistência: '+(ST.persist==='db'?'compartilhada':'só nesta sessão')+'<br>Cap.: '+ST.cfg.cap+' h/dia'}
+function renderBanner(){const cs=curSnap();$('#banner').innerHTML=warnBanner(cs)+(cs.demo?'<div class="banner"><b>Dados históricos de demonstração.</b> Baseline do ADO (4TAX-OUTBOUND) de '+fdy(cs.date)+', usado para validar os indicadores. Não é a leitura atual do Azure DevOps.<span class="sp"></span><button class="btn sm" data-nav="data">Importar dados</button></div>':'<div class="banner" style="background:var(--blue-bg);border-color:rgba(59,130,246,.4);color:var(--blue2)">Fonte: <b>'+esc(cs.origin)+'</b> · snapshot de '+fdy(cs.date)+(cs.auto&&cs.ts?' · atualizado em '+new Date(cs.ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'')+'.</div>')}
+function renderFoot(){const cs=curSnap();$('#sfoot').innerHTML='Snapshot: <b>'+esc(cs.label)+'</b><br>Persistência: '+(ST.persist==='db'?'compartilhada':'só nesta sessão')+'<br>Cap.: '+ST.cfg.cap+' h/dia<br>Metodologia: '+(verOf(cs)===1?'contrato 1':'legada')}
 function render(){try{compute();renderNav();renderFilters();renderBanner();renderFoot();const pg=NAV.find(n=>n[0]===ST.page)||NAV[0];$('#view').innerHTML=pg[2]();renderDrawer()}catch(e){console.error(e);$('#view').innerHTML='<div class="note r">Erro ao renderizar: '+esc(e.message)+'</div>'}}
 /* ============ EVENTOS ============ */
 const V=document.body;
