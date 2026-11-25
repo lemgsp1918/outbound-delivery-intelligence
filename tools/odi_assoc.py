@@ -184,8 +184,11 @@ def montar(motor, out):
         e, r, c, w = horas(f)
         return [t, d, f['System.State'], nome(f.get('System.AssignedTo')), e, r, c, w, f.get('System.IterationPath', '')]
     rows = [linha(t, v['d']) for t, v in out.items() if v['cls'] == 'ok']
-    meta = {str(t): {'t': it[t]['System.Title'], 'tp': it[t]['System.WorkItemType'], 'p': it[t].get('System.Parent'),
-                     'it': it[t].get('System.IterationPath', '')} for t in out}
+    # 'it' (IterationPath) nao entra em meta: ja esta em rows[8] e em inconc/orf.it,
+    # e o painel nao le META[id].it. Omitir economiza ~34 KB e mantem o documento
+    # abaixo do limite de 262144 bytes do ArtifactData.
+    meta = {str(t): {'t': it[t]['System.Title'], 'tp': it[t]['System.WorkItemType'], 'p': it[t].get('System.Parent')}
+            for t in out}
     def lado(t, v):
         r = linha(t, None)
         f = it[t]
